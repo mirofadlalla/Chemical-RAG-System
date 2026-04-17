@@ -65,7 +65,7 @@ async def search(request: SearchRequest):
         compound_results = [
             CompoundResult(
                 smiles=r["smiles"],
-                distance=r["distance"],
+                similarity_score=r["similarity_score"],  # Tanimoto (0-1)
                 image=r.get("image")
             )
             for r in results
@@ -83,10 +83,17 @@ async def stats():
     from .services import dataset, engine
     
     if engine is None or dataset is None:
-        return {"compounds": 0, "index_size": 0}
+        return {
+            "compounds": 0,
+            "index_size": 0,
+            "fingerprint_bits": 2048,
+            "similarity_metric": "Tanimoto"
+        }
     
     return {
         "compounds": len(dataset),
-        "index_size": engine.index.ntotal,
-        "bit_size": engine.bit_size
+        "index_size": len(engine.fingerprints),
+        "fingerprint_bits": engine.bit_size,
+        "similarity_metric": "Tanimoto",
+        "method": "RDKit (Binary fingerprints)"
     }

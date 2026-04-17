@@ -1,0 +1,10 @@
+{
+  "name": "chemical-rag-system",
+  "version": "1.0.0",
+  "description": "Production-grade chemical similarity search with FAISS and RDKit",
+  "keywords": ["chemistry", "SMILES", "similarity-search", "FAISS", "RDKit", "FastAPI", "PubChem"],
+  "author": "Chemical RAG Team",
+  "license": "MIT",
+  "python_version": ">=3.11",
+  "status": "PRODUCTION_READY"
+}

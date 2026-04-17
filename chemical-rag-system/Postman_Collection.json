@@ -1,0 +1,192 @@
+{
+  "info": {
+    "name": "Chemical RAG System API",
+    "description": "Complete API collection for Chemical Similarity Search",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "http://127.0.0.1:8000/health",
+            "description": "Check API health status"
+          }
+        },
+        {
+          "name": "System Statistics",
+          "request": {
+            "method": "GET",
+            "url": "http://127.0.0.1:8000/stats",
+            "description": "Get loaded compounds and index size"
+          }
+        },
+        {
+          "name": "Root Endpoint",
+          "request": {
+            "method": "GET",
+            "url": "http://127.0.0.1:8000/",
+            "description": "API root status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chemical Search",
+      "item": [
+        {
+          "name": "Search - Ethanol (CCO)",
+          "request": {
+            "method": "POST",
+            "url": "http://127.0.0.1:8000/search",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smiles\": \"CCO\",\n  \"top_k\": 3\n}"
+            },
+            "description": "Search similar compounds to ethanol"
+          }
+        },
+        {
+          "name": "Search - Benzene (c1ccccc1)",
+          "request": {
+            "method": "POST",
+            "url": "http://127.0.0.1:8000/search",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smiles\": \"c1ccccc1\",\n  \"top_k\": 5\n}"
+            },
+            "description": "Search similar compounds to benzene"
+          }
+        },
+        {
+          "name": "Search - Acetic Acid (CC(=O)O)",
+          "request": {
+            "method": "POST",
+            "url": "http://127.0.0.1:8000/search",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smiles\": \"CC(=O)O\",\n  \"top_k\": 3\n}"
+            },
+            "description": "Search similar compounds to acetic acid"
+          }
+        },
+        {
+          "name": "Search - Methanol (CO)",
+          "request": {
+            "method": "POST",
+            "url": "http://127.0.0.1:8000/search",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smiles\": \"CO\",\n  \"top_k\": 5\n}"
+            },
+            "description": "Search similar compounds to methanol"
+          }
+        },
+        {
+          "name": "Search - Large Result Set",
+          "request": {
+            "method": "POST",
+            "url": "http://127.0.0.1:8000/search",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smiles\": \"CCO\",\n  \"top_k\": 20\n}"
+            },
+            "description": "Search with larger result set"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error Handling",
+      "item": [
+        {
+          "name": "Invalid SMILES",
+          "request": {
+            "method": "POST",
+            "url": "http://127.0.0.1:8000/search",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smiles\": \"INVALID_SMILES_123\",\n  \"top_k\": 3\n}"
+            },
+            "description": "Test invalid SMILES handling"
+          }
+        },
+        {
+          "name": "Empty SMILES",
+          "request": {
+            "method": "POST",
+            "url": "http://127.0.0.1:8000/search",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smiles\": \"\",\n  \"top_k\": 3\n}"
+            },
+            "description": "Test empty SMILES handling"
+          }
+        },
+        {
+          "name": "Invalid top_k",
+          "request": {
+            "method": "POST",
+            "url": "http://127.0.0.1:8000/search",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smiles\": \"CCO\",\n  \"top_k\": 200\n}"
+            },
+            "description": "Test top_k out of bounds"
+          }
+        }
+      ]
+    }
+  ]
+}

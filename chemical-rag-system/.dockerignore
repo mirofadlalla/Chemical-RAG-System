@@ -1,0 +1,49 @@
+# Docker Build Artifacts
+.dockerignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Virtual Environments
+.venv
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project
+.env
+.env.local
+*.log
+
+# Git
+.git
+.gitignore
+
+# Node (for future frontend)
+node_modules/
+npm-debug.log
+
+# Keep these
+!data/
+!app/static/images/

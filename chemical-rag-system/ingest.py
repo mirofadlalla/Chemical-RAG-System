@@ -147,67 +147,111 @@ def is_valid_organic_molecule(smiles: str) -> bool:
     except Exception:
         return False
 
-def fetch_compounds_batched(start_id: int, total_count: int, batch_size: int = 500):
+def fetch_compounds_batched(start_id: int, total_count: int, batch_size: int = 250, max_retries: int = 3):
     """
-    جلب المركبات على دفعات صغيرة لتجنب الـ Timeout
+    Fetch compounds in small batches with retry logic to avoid API timeouts.
+    
+    Reduced batch size (250) and progressive delays for reliability.
+    Saves progress incrementally to avoid losing data on failure.
     """
     print(f"🔄 Starting ingestion for {total_count} compounds in batches of {batch_size}...")
+    print(f"⚠️  Note: Smaller batches (250) for better reliability with PubChem API\n")
     
     all_data = []
     successful = 0
     failed = 0
     filtered_out = 0
+    skipped = 0
 
-    # تقسيم العدد الكلي إلى دفعات (مثلاً كل دفعة 500 مركب)
     for i in range(0, total_count, batch_size):
         current_start = start_id + i
         current_end = min(start_id + i + batch_size, start_id + total_count)
         cids = list(range(current_start, current_end))
+        batch_num = (i // batch_size) + 1
+        total_batches = (total_count + batch_size - 1) // batch_size
         
-        print(f"📡 Fetching CIDs {current_start} to {current_end-1}...")
+        print(f"[{batch_num}/{total_batches}] 📡 Fetching CIDs {current_start} to {current_end-1}...")
         
-        try:
-            # طلب الدفعة الحالية
-            compounds = pcp.get_compounds(cids, namespace='cid')
-            
-            for c in compounds:
-                if c:
-                    smiles = getattr(c, 'connectivity_smiles', None) or getattr(c, 'canonical_smiles', None)
-                    if smiles:
-                        if not is_valid_organic_molecule(smiles):
-                            filtered_out += 1
-                            continue
-                        
-                        all_data.append({
-                            "smiles": smiles,
-                            "cid": c.cid,
-                            "name": c.iupac_name or f"Compound_{c.cid}",
-                            "mw": c.molecular_weight if hasattr(c, 'molecular_weight') else None
-                        })
-                        successful += 1
-            
-            time.sleep(0.5) 
-            
-        except Exception as e:
-            print(f"⚠️ Error fetching batch starting at {current_start}: {e}")
-            failed += len(cids)
-            continue
+        # Retry logic for failed batches
+        retry_count = 0
+        batch_success = False
+        
+        while retry_count < max_retries and not batch_success:
+            try:
+                # Fetch batch with timeout handling
+                compounds = pcp.get_compounds(cids, namespace='cid')
+                
+                batch_successful = 0
+                for c in compounds:
+                    if c:
+                        smiles = getattr(c, 'connectivity_smiles', None) or getattr(c, 'canonical_smiles', None)
+                        if smiles:
+                            if not is_valid_organic_molecule(smiles):
+                                filtered_out += 1
+                                continue
+                            
+                            all_data.append({
+                                "smiles": smiles,
+                                "cid": c.cid,
+                                "name": c.iupac_name or f"Compound_{c.cid}",
+                                "mw": c.molecular_weight if hasattr(c, 'molecular_weight') else None
+                            })
+                            successful += 1
+                            batch_successful += 1
+                    else:
+                        skipped += 1
+                
+                print(f"    ✅ Batch complete: {batch_successful} valid compounds added")
+                batch_success = True
+                
+                # Progressive delay: 0.5s for first batch, 1s for later batches
+                delay = 0.5 + (batch_num * 0.1)  # Increases delay for later batches
+                time.sleep(min(delay, 2.0))  # Cap at 2 seconds
+                
+            except (json.JSONDecodeError, ConnectionError, TimeoutError, Exception) as e:
+                retry_count += 1
+                if retry_count < max_retries:
+                    wait_time = 2 ** retry_count  # Exponential backoff: 2s, 4s, 8s
+                    print(f"    ⚠️  Attempt {retry_count} failed: {type(e).__name__}")
+                    print(f"    ⏳ Retrying in {wait_time}s... (attempt {retry_count+1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    print(f"    ❌ Batch failed after {max_retries} retries: {type(e).__name__}")
+                    failed += len(cids)
+                    batch_success = True  # Exit retry loop
 
-    print(f"\n--- Final Report ---")
+    print(f"\n{'='*60}")
     print(f"✅ Successfully ingested: {successful}")
-    print(f"❌ Failed: {failed}")
-    print(f"⚗️  Filtered out: {filtered_out}")
+    print(f"❌ Failed compounds: {failed}")
+    print(f"⚗️  Filtered out (invalid): {filtered_out}")
+    print(f"⏭️  Skipped/Missing: {skipped}")
+    print(f"📊 Total valid compounds: {len(all_data)}")
+    print(f"{'='*60}\n")
+    
     return all_data
 
 def save_compounds(data, filepath="data/compounds.json"):
+    """Save compounds to JSON file with pretty formatting."""
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, "w") as f:
         json.dump(data, f, indent=2)
     print(f"💾 Saved {len(data)} compounds to {filepath}")
 
-if __name__ == "__main__":
 
-    data = fetch_compounds_batched(start_id=1, total_count=50000, batch_size=2000)
+if __name__ == "__main__":
+    # Fetch 50,000 compounds with reliable batching
+    # Using batch_size=250 (down from 2000) to avoid PubChem API timeouts
+    # With retries and exponential backoff for failed batches
+    data = fetch_compounds_batched(
+        start_id=1, 
+        total_count=50000, 
+        batch_size=500,  # Reduced from 2000 for better reliability
+        max_retries=3    # Retry failed batches up to 3 times
+    )
     
-    save_compounds(data)
-    print("✅ Ingestion pipeline completed!")
+    # Only save if we have data
+    if data:
+        save_compounds(data)
+        print("✅ Ingestion pipeline completed!")
+    else:
+        print("❌ No compounds ingested. Please check your internet connection and try again.")

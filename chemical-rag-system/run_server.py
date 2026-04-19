@@ -25,7 +25,7 @@ if __name__ == "__main__":
         port = 8000
         is_reload = True
     
-    print(f"🚀 Starting FastAPI server on {host}:{port}")
+    print(f"[STARTUP] Starting FastAPI server on {host}:{port}")
     if running_in_docker:
         print("   Running in Docker mode (reload disabled)")
     else:

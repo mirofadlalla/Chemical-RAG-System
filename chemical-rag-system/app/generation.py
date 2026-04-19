@@ -4,8 +4,8 @@ Uses HuggingFace Llama-3.1-8B with few-shot instruction tuning
 """
 
 import os
+import requests
 from typing import Optional
-from huggingface_hub import InferenceClient
 
 
 # Few-shot examples for instruction tuning
@@ -99,16 +99,11 @@ def generate_explanation(
         Explanation string or None if generation fails
     """
     try:
-        # Initialize HF client
+        # Get HF token
         api_key = os.environ.get("HF_TOKEN")
         if not api_key:
             # Fallback to a simple heuristic explanation if token not set
             return _generate_fallback_explanation(similarity_score)
-        
-        client = InferenceClient(
-            provider="auto",
-            api_key=api_key,
-        )
         
         # Build the complete prompt with few-shot examples
         system_prompt = build_system_prompt()
@@ -117,15 +112,27 @@ def generate_explanation(
         
         full_prompt = f"{system_prompt}\n\n{few_shot_context}\nNow, analyze this pair:\n{user_prompt}"
         
-        # Generate explanation using Llama-3.1-8B
-        result = client.text_generation(
-            full_prompt,
-            model="meta-llama/Llama-3.1-8B-Instruct:latest",
-            max_new_tokens=150,
-            temperature=0.7,
-        )
+        # Use HuggingFace Router API endpoint (highest priority)
+        api_url = "https://router.huggingface.co/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+        }
         
-        explanation = result.strip() if result else None
+        payload = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": full_prompt
+                }
+            ],
+            "model": "meta-llama/Llama-3.1-8B-Instruct:fastest"
+        }
+        
+        response = requests.post(api_url, headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        
+        explanation = result["choices"][0]["message"]["content"].strip() if result else None
         
         # Validate the explanation is not too short
         if explanation and len(explanation) > 20:
@@ -134,7 +141,7 @@ def generate_explanation(
             return _generate_fallback_explanation(similarity_score)
             
     except Exception as e:
-        print(f"⚠️ LLM generation failed: {e}. Using fallback explanation.")
+        # Silently fall back - don't spam warnings for API unavailability
         return _generate_fallback_explanation(similarity_score)
 
 

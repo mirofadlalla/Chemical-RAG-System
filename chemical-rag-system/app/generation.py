@@ -1,192 +1,132 @@
-"""
-LLM-based Generation Layer for Chemical Similarity Explanation
-Uses HuggingFace Llama-3.1-8B with few-shot instruction tuning
-"""
-
 import os
 import requests
-from typing import Optional
+from typing import Optional, Dict, List
+from rdkit import Chem
+from rdkit.Chem import Descriptors, rdMolDescriptors
 
+"""
+LLM-based Generation Layer for Chemical Similarity Explanation
+Version 2.0: Optimized with RDKit Grounding & Hallucination Guardrails
+"""
 
-# Few-shot examples for instruction tuning
-FEW_SHOT_EXAMPLES = [
-    {
-        "query": "CCO",  # Ethanol
-        "compound": "CC(C)O",  # Isopropanol
-        "similarity": 0.89,
-        "explanation": "Both are simple primary alcohols with similar hydroxyl functional groups. Both contain 2-3 carbons and show high structural similarity in their C-O backbone and hydrogen bonding patterns."
-    },
-    {
-        "query": "c1ccccc1",  # Benzene
-        "compound": "c1ccccc1C(=O)O",  # Benzoic acid
-        "similarity": 0.92,
-        "explanation": "Both contain the benzene ring (aromatic core) as the main structural feature. The compound adds a carboxylic acid group to benzene, maintaining the core aromatic structure with additional polar functionality."
-    },
-    {
-        "query": "CC(=O)O",  # Acetic acid
-        "compound": "CC(=O)Nc1ccc(O)cc1",  # Acetaminophen
-        "similarity": 0.76,
-        "explanation": "Both share the acetyl group (CC(=O)-) which is a common functional motif. The similarity is moderate because the compound has a much larger aromatic system, but they share the same carbonyl-carbon backbone feature."
-    },
-    {
-        "query": "C1CCCCC1",  # Cyclohexane  
-        "compound": "C1CCCCC1O",  # Cyclohexanol
-        "similarity": 0.88,
-        "explanation": "Both contain the six-membered saturated ring (cyclohexane core). The compound adds a hydroxyl group, making it more polar, but the underlying ring structure is nearly identical, resulting in high structural similarity."
-    },
-    {
-        "query": "CCN(CC)CC",  # Triethylamine
-        "compound": "CCN(CC)CCOC",  # N,N-diethylethanolamine derivative
-        "similarity": 0.82,
-        "explanation": "Both molecules contain the diethylamino group (CCN(CC)-) which appears in the same position. The main structural difference is that the compound has an additional ether linkage, but the core amine feature ensures high similarity."
-    }
-]
+# 1. RDKit Metadata Engine - لمنع التخمين الخاطئ
+def get_rdkit_metadata(smiles: str) -> Dict:
+    """Extracts factual chemical data to anchor the LLM response."""
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            return {}
+        return {
+            "formula": rdMolDescriptors.CalcMolFormula(mol),
+            "mw": round(Descriptors.MolWt(mol), 2),
+            "heavy_atoms": mol.GetNumHeavyAtoms(),
+            "formal_charge": Chem.GetFormalCharge(mol)
+        }
+    except Exception:
+        return {}
 
-
+# 2. System Prompt - تحديد قواعد اللعبة
 def build_system_prompt() -> str:
-    """Build the system prompt for the LLM with instruction tuning."""
-    return """You are a chemistry expert assistant that explains why two chemical compounds are similar.
+    """Build the system prompt with strict chemical constraints."""
+    return """Role:
+You are an expert Cheminformatics AI Assistant. Your task is to explain the structural similarity between a "Query Compound" and a "Match Compound" based on SMILES notation and provided RDKit metadata.
 
-Your task is to analyze the structural similarity between two compounds and provide a clear, concise explanation focusing on:
-1. Shared functional groups (e.g., hydroxyl, carboxyl, amine, aromatic rings)
-2. Similar structural motifs (e.g., carbon chains, rings, double bonds)
-3. Chemical properties affected by the similarity (e.g., polarity, reactivity)
-4. Molecular complexity differences if significant
+Strict Guidelines to Prevent Hallucinations:
+1. GROUNDING: Use the provided Molecular Formula to verify atom counts. If the formula is C4H9Br, do NOT say it has 4 Bromine atoms.
+2. TETRAVALENCY: Carbon is ALWAYS tetravalent (4 bonds). Never describe a carbon atom as "pentavalent" or having more than 4 bonds.
+3. SMILES PARSING: Parentheses ( ) denote branches on the same atom. E.g., C(Br)(Br) means two Bromines on the same Carbon.
+4. NO GUESSING NAMES: Do not attempt IUPAC naming unless certain. Use descriptive terms like "tri-halogenated methane" or "tert-butyl scaffold".
+5. ISOSTERES: Identify isosteric replacements correctly (e.g., swapping Br for Cl or F).
+6. CONCISENESS: Keep the explanation to 2-3 precise technical sentences."""
 
-Keep explanations brief (2-3 sentences), scientific but accessible, and focus on the most important shared features."""
-
-
-def build_few_shot_context() -> str:
-    """Build few-shot examples for the prompt."""
-    context = "Here are some examples of compound similarity explanations:\n\n"
+# 3. User Prompt - تمرير البيانات الحقيقية
+def build_user_prompt(query_smiles: str, match_smiles: str, similarity: float) -> str:
+    """Combines SMILES with RDKit metadata for the LLM context."""
+    q_meta = get_rdkit_metadata(query_smiles)
+    m_meta = get_rdkit_metadata(match_smiles)
     
-    for i, example in enumerate(FEW_SHOT_EXAMPLES, 1):
-        context += f"Example {i}:\n"
-        context += f"Query: {example['query']}\n"
-        context += f"Similar Compound: {example['compound']}\n"
-        context += f"Similarity Score: {example['similarity']:.2f}\n"
-        context += f"Explanation: {example['explanation']}\n\n"
-    
-    return context
+    return f"""Analyze the following compound pair:
 
+Query: {query_smiles}
+- Formula: {q_meta.get('formula', 'N/A')}
+- Heavy Atoms: {q_meta.get('heavy_atoms', 'N/A')}
 
-def build_user_prompt(query_smiles: str, compound_smiles: str, similarity_score: float) -> str:
-    """Build the user prompt for a specific query-compound pair."""
-    return f"""Query Compound SMILES: {query_smiles}
-Similar Compound SMILES: {compound_smiles}
-Tanimoto Similarity Score: {similarity_score:.3f}
+Match: {match_smiles}
+- Formula: {m_meta.get('formula', 'N/A')}
+- Heavy Atoms: {m_meta.get('heavy_atoms', 'N/A')}
 
-Please explain why these compounds are similar and what structural features they share. 
-Keep it concise (2-3 sentences) and focus on chemical relevance."""
+Similarity Score: {similarity:.3f}
 
+Task: Explain why these compounds are structurally similar. Focus on the core scaffold and atom substitutions. Reference the formulas to ensure accuracy."""
 
+# 4. Generation Core - التواصل مع اللاما
 def generate_explanation(
     query_smiles: str,
     compound_smiles: str,
-    similarity_score: float,
-    max_retries: int = 2
+    similarity_score: float
 ) -> Optional[str]:
-    """
-    Generate an LLM-based explanation for compound similarity.
-    
-    Args:
-        query_smiles: SMILES of the query compound
-        compound_smiles: SMILES of the similar compound found
-        similarity_score: Tanimoto similarity score (0-1)
-        max_retries: Maximum number of API retries
-    
-    Returns:
-        Explanation string or None if generation fails
-    """
+    """Generates a fact-checked explanation using Llama-3.1 via HF Router."""
     try:
-        # Get HF token
         api_key = os.environ.get("HF_TOKEN")
         if not api_key:
-            # Fallback to a simple heuristic explanation if token not set
             return _generate_fallback_explanation(similarity_score)
         
-        # Build the complete prompt with few-shot examples
         system_prompt = build_system_prompt()
-        few_shot_context = build_few_shot_context()
         user_prompt = build_user_prompt(query_smiles, compound_smiles, similarity_score)
         
-        full_prompt = f"{system_prompt}\n\n{few_shot_context}\nNow, analyze this pair:\n{user_prompt}"
-        
-        # Use HuggingFace Router API endpoint (highest priority)
+        # HuggingFace Router API
         api_url = "https://router.huggingface.co/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-        }
+        headers = {"Authorization": f"Bearer {api_key}"}
         
         payload = {
             "messages": [
-                {
-                    "role": "user",
-                    "content": full_prompt
-                }
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ],
-            "model": "meta-llama/Llama-3.1-8B-Instruct:fastest"
+            "model": "meta-llama/Llama-3.1-8B-Instruct:fastest",
+            "temperature": 0.1,  # Low temperature for high factual precision
+            "max_tokens": 100
         }
         
-        response = requests.post(api_url, headers=headers, json=payload)
+        response = requests.post(api_url, headers=headers, json=payload, timeout=10)
         response.raise_for_status()
         result = response.json()
         
-        explanation = result["choices"][0]["message"]["content"].strip() if result else None
-        
-        # Validate the explanation is not too short
-        if explanation and len(explanation) > 20:
-            return explanation
-        else:
-            return _generate_fallback_explanation(similarity_score)
+        explanation = result["choices"][0]["message"]["content"].strip()
+        return explanation if len(explanation) > 10 else _generate_fallback_explanation(similarity_score)
             
-    except Exception as e:
-        # Silently fall back - don't spam warnings for API unavailability
+    except Exception:
         return _generate_fallback_explanation(similarity_score)
 
-
 def _generate_fallback_explanation(similarity_score: float) -> str:
-    """
-    Fallback heuristic explanation when LLM is unavailable.
-    
-    Args:
-        similarity_score: Tanimoto similarity score (0-1)
-    
-    Returns:
-        Heuristic explanation based on similarity score
-    """
+    """Heuristic fallback in case of API failure."""
     if similarity_score >= 0.95:
-        return "Extremely high structural similarity - compounds likely differ only in minor substituents or stereochemistry."
-    elif similarity_score >= 0.85:
-        return "Very high structural similarity - compounds share the same core structure with similar functional groups."
-    elif similarity_score >= 0.70:
-        return "Strong structural similarity - compounds contain similar aromatic rings or carbon scaffolds with analogous functional groups."
-    elif similarity_score >= 0.50:
-        return "Moderate structural similarity - compounds share some common functional groups or molecular features but differ in overall architecture."
-    else:
-        return "Lower similarity - compounds have some shared molecular features but differ significantly in structure and composition."
+        return "Extremely high structural similarity - compounds share an identical core scaffold with minimal substituent variation."
+    return "Significant structural similarity based on shared molecular framework and functional group distribution."
 
-
-def generate_explanations_batch(
-    query_smiles: str,
-    search_results: list
-) -> list:
-    """
-    Generate explanations for multiple search results.
-    
-    Args:
-        query_smiles: SMILES of the query compound
-        search_results: List of search result dicts with 'smiles' and 'similarity_score'
-    
-    Returns:
-        Same search_results list with 'explanation' field added to each result
-    """
+# 5. Batch Processing - معالجة النتائج بالكامل
+def generate_explanations_batch(query_smiles: str, search_results: List[Dict]) -> List[Dict]:
+    """Adds an 'explanation' field to each search result."""
     for result in search_results:
-        explanation = generate_explanation(
+        result["explanation"] = generate_explanation(
             query_smiles,
             result["smiles"],
             result["similarity_score"]
         )
-        result["explanation"] = explanation
-    
     return search_results
+
+# Example Usage:
+if __name__ == "__main__":
+    # Mock search results
+    query = "C(Br)(Br)(Br)Br"
+    results = [
+        {"smiles": "C(Cl)(Cl)(Cl)Br", "similarity_score": 0.998},
+        {"smiles": "CC(C)(C)Br", "similarity_score": 0.998}
+    ]
+    
+    # You need to set your HF_TOKEN in environment variables
+    # os.environ["HF_TOKEN"] = "your_token_here"
+    
+    updated_results = generate_explanations_batch(query, results)
+    for res in updated_results:
+        print(f"SMILES: {res['smiles']}\nScore: {res['similarity_score']}\nExplanation: {res['explanation']}\n{'-'*30}")

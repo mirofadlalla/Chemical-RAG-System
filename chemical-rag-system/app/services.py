@@ -103,13 +103,14 @@ def initialize_engine():
     return engine
 
 
-def _search_internal(smiles: str, top_k: int, include_explanation: bool = True):
+def _search_internal(smiles: str, top_k: int, base_url: str = None, include_explanation: bool = True):
     """
     Internal search using FAISS-IVF with optional LLM explanation.
     
     Args:
         smiles: Query SMILES string
         top_k: Number of results (1-100)
+        base_url: Base URL for image URLs (e.g. https://example.com)
         include_explanation: Whether to generate LLM explanations
     
     Returns:
@@ -130,7 +131,7 @@ def _search_internal(smiles: str, top_k: int, include_explanation: bool = True):
         enriched.append({
             "smiles": r["smiles"],
             "similarity_score": r["similarity_score"],
-            "image": smiles_to_image_url(r["smiles"]),
+            "image": smiles_to_image_url(r["smiles"], base_url=base_url),
             "cid": str(cid) if cid is not None else None,  # Convert to string for schema
             "name": r["metadata"].get("name"),
             "mw": r["metadata"].get("mw"),
@@ -153,7 +154,7 @@ def cached_search(smiles: str, top_k: int, explain: bool = True):
     return tuple([tuple(sorted(r.items())) for r in results])
 
 
-def get_search_results(smiles: str, top_k: int = 3, explain: bool = True):
+def get_search_results(smiles: str, top_k: int = 3, explain: bool = True, base_url: str = None):
     """
     Main search function: FAISS-IVF retrieval with optional LLM generation.
     
@@ -161,26 +162,28 @@ def get_search_results(smiles: str, top_k: int = 3, explain: bool = True):
         smiles: Query SMILES string
         top_k: Number of results to return (default 3, max 100)
         explain: Whether to generate LLM explanations (default True)
+        base_url: Base URL for image URLs (e.g. https://example.com)
     
     Returns:
         Tuple of (results_list, query_smiles)
     """
-    results = _search_internal(smiles, top_k, include_explanation=explain)
+    results = _search_internal(smiles, top_k, base_url=base_url, include_explanation=explain)
     return results, smiles
 
 
-def get_search_results_retrieval_only(smiles: str, top_k: int = 3):
+def get_search_results_retrieval_only(smiles: str, top_k: int = 3, base_url: str = None):
     """
     Fast retrieval-only search (no LLM generation).
     
     Args:
         smiles: Query SMILES string
         top_k: Number of results to return (default 3, max 100)
+        base_url: Base URL for image URLs (e.g. https://example.com)
     
     Returns:
         Tuple of (results_list, query_smiles)
     """
-    results = _search_internal(smiles, top_k, include_explanation=False)
+    results = _search_internal(smiles, top_k, base_url=base_url, include_explanation=False)
     return results, smiles
 
 

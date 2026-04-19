@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.concurrency import run_in_threadpool
 import os
@@ -67,7 +67,7 @@ async def health():
 
 
 @app.post("/search/retrieval-only", response_model=SearchResponse)
-async def search_retrieval_only(request: SearchRequest):
+async def search_retrieval_only(payload: SearchRequest, http_request: Request):
     """
     ⚡ FAST RETRIEVAL ENDPOINT (No LLM generation)
     
@@ -85,18 +85,22 @@ async def search_retrieval_only(request: SearchRequest):
     """
     
     # Validate SMILES
-    if not request.smiles or len(request.smiles.strip()) == 0:
+    if not payload.smiles or len(payload.smiles.strip()) == 0:
         raise HTTPException(status_code=400, detail="SMILES string cannot be empty")
     
-    if request.top_k < 1 or request.top_k > 100:
+    if payload.top_k < 1 or payload.top_k > 100:
         raise HTTPException(status_code=400, detail="top_k must be between 1 and 100")
 
     try:
+        # Get base URL from request
+        base_url = str(http_request.base_url).rstrip('/')
+        
         # Run retrieval-only search (no generation)
         results, query_smiles = await run_in_threadpool(
             get_search_results_retrieval_only,
-            request.smiles.strip(),
-            request.top_k
+            payload.smiles.strip(),
+            payload.top_k,
+            base_url
         )
 
         if not results:
@@ -128,7 +132,7 @@ async def search_retrieval_only(request: SearchRequest):
 
 
 @app.post("/search/full-rag", response_model=SearchResponse)
-async def search_full_rag(request: SearchRequest):
+async def search_full_rag(payload: SearchRequest, http_request: Request):
     """
     🤖 FULL RAG ENDPOINT (Retrieval + LLM Explanation)
     
@@ -146,19 +150,23 @@ async def search_full_rag(request: SearchRequest):
     """
     
     # Validate SMILES
-    if not request.smiles or len(request.smiles.strip()) == 0:
+    if not payload.smiles or len(payload.smiles.strip()) == 0:
         raise HTTPException(status_code=400, detail="SMILES string cannot be empty")
     
-    if request.top_k < 1 or request.top_k > 100:
+    if payload.top_k < 1 or payload.top_k > 100:
         raise HTTPException(status_code=400, detail="top_k must be between 1 and 100")
 
     try:
+        # Get base URL from request
+        base_url = str(http_request.base_url).rstrip('/')
+        
         # Run full RAG search with explanations
         results, query_smiles = await run_in_threadpool(
             get_search_results,
-            request.smiles.strip(),
-            request.top_k,
-            request.explain  # Use the explain parameter
+            payload.smiles.strip(),
+            payload.top_k,
+            payload.explain,  # Use the explain parameter
+            base_url
         )
 
         if not results:

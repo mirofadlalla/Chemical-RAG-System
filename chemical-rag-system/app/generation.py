@@ -9,7 +9,7 @@ LLM-based Generation Layer for Chemical Similarity Explanation
 Version 2.0: Optimized with RDKit Grounding & Hallucination Guardrails
 """
 
-# 1. RDKit Metadata Engine - لمنع التخمين الخاطئ
+# 1. RDKit Metadata Engine 
 def get_rdkit_metadata(smiles: str) -> Dict:
     """Extracts factual chemical data to anchor the LLM response."""
     try:
@@ -25,7 +25,7 @@ def get_rdkit_metadata(smiles: str) -> Dict:
     except Exception:
         return {}
 
-# 2. System Prompt - تحديد قواعد اللعبة
+# 2. System Prompt
 def build_system_prompt() -> str:
     """Build the system prompt with strict chemical constraints."""
     return """Role:
@@ -39,7 +39,7 @@ Strict Guidelines to Prevent Hallucinations:
 5. ISOSTERES: Identify isosteric replacements correctly (e.g., swapping Br for Cl or F).
 6. CONCISENESS: Keep the explanation to 2-3 precise technical sentences."""
 
-# 3. User Prompt - تمرير البيانات الحقيقية
+# 3. User Prompt 
 def build_user_prompt(query_smiles: str, match_smiles: str, similarity: float) -> str:
     """Combines SMILES with RDKit metadata for the LLM context."""
     q_meta = get_rdkit_metadata(query_smiles)
@@ -59,7 +59,7 @@ Similarity Score: {similarity:.3f}
 
 Task: Explain why these compounds are structurally similar. Focus on the core scaffold and atom substitutions. Reference the formulas to ensure accuracy."""
 
-# 4. Generation Core - التواصل مع اللاما
+# 4. Generation Core 
 def generate_explanation(
     query_smiles: str,
     compound_smiles: str,
@@ -104,7 +104,7 @@ def _generate_fallback_explanation(similarity_score: float) -> str:
         return "Extremely high structural similarity - compounds share an identical core scaffold with minimal substituent variation."
     return "Significant structural similarity based on shared molecular framework and functional group distribution."
 
-# 5. Batch Processing - معالجة النتائج بالكامل
+# 5. Batch Processing
 def generate_explanations_batch(query_smiles: str, search_results: List[Dict]) -> List[Dict]:
     """Adds an 'explanation' field to each search result."""
     for result in search_results:

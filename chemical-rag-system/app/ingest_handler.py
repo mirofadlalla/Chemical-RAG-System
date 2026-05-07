@@ -20,15 +20,15 @@ def run_ingestion():
             with open(data_file) as f:
                 data = json.load(f)
             if len(data) > 0:
-                print(f"✅ Data already exists: {len(data)} compounds")
+                print(f"Data already exists: {len(data)} compounds")
                 return True
         except:
             pass
     
-    print("🔄 Running ingest.py...")
+    print("Running ingest.py...")
     if os.path.exists(ingest_script):
         os.system(f"{sys.executable} {ingest_script}")
         return True
     else:
-        print(f"❌ ingest.py not found at {ingest_script}")
+        print(f"ingest.py not found at {ingest_script}")
         return False

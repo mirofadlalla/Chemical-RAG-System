@@ -29,7 +29,9 @@ async def startup_event():
         initialize_engine()
         print("[SUCCESS] API startup successful (v2.1.0)")
     except Exception as e:
-        print(f"[ERROR] Startup warning: {e}")
+        import traceback
+        print(f"[ERROR] Startup failed: {str(e)}")
+        traceback.print_exc()
 
 
 @app.get("/")
@@ -103,10 +105,7 @@ async def search_retrieval_only(payload: SearchRequest, http_request: Request):
             base_url
         )
 
-        if not results:
-            raise HTTPException(status_code=400, detail="Invalid SMILES string")
-
-        # Convert to response model
+        # Convert to response model (empty results is OK - just no matches found)
         compound_results = [
             CompoundResult(
                 smiles=r["smiles"],
@@ -128,6 +127,10 @@ async def search_retrieval_only(payload: SearchRequest, http_request: Request):
     except HTTPException:
         raise
     except Exception as e:
+        # Check if it's a SMILES validation issue
+        error_msg = str(e).lower()
+        if "smiles" in error_msg or "invalid" in error_msg:
+            raise HTTPException(status_code=400, detail=f"Invalid SMILES string: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -169,10 +172,7 @@ async def search_full_rag(payload: SearchRequest, http_request: Request):
             base_url
         )
 
-        if not results:
-            raise HTTPException(status_code=400, detail="Invalid SMILES string")
-
-        # Convert to response model
+        # Convert to response model (empty results is OK - just no matches found)
         compound_results = [
             CompoundResult(
                 smiles=r["smiles"],
@@ -194,6 +194,10 @@ async def search_full_rag(payload: SearchRequest, http_request: Request):
     except HTTPException:
         raise
     except Exception as e:
+        # Check if it's a SMILES validation issue
+        error_msg = str(e).lower()
+        if "smiles" in error_msg or "invalid" in error_msg:
+            raise HTTPException(status_code=400, detail=f"Invalid SMILES string: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

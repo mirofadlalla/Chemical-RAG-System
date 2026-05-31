@@ -55,7 +55,7 @@ def initialize_engine():
     """
     global engine, dataset
     
-    if engine is not None:
+    if engine is not None and dataset is not None:
         return engine
     
     data_path, index_path = get_data_paths()
@@ -82,7 +82,7 @@ def initialize_engine():
     
     # Step 3: Initialize engine
     smiles_list = [d["smiles"] for d in dataset]
-    engine = ChemicalSearchEngine(bit_size=2048, n_lists=200)
+    engine = ChemicalSearchEngine(bit_size=2048)
     
     # Step 4: Check for FAISS index
     if index_exists():
@@ -99,6 +99,7 @@ def initialize_engine():
     engine.save_index(index_path)
     
     print(f"[SUCCESS] Generation layer enabled with Llama-3.1-8B")
+    print(f"[SUCCESS] FAISS index saved to {index_path}")
     print("="*60 + "\n")
     return engine
 
@@ -116,6 +117,8 @@ def _search_internal(smiles: str, top_k: int, base_url: str = None, include_expl
     Returns:
         List of enriched results with metadata and optional explanations
     """
+    global engine, dataset
+    
     if engine is None:
         raise RuntimeError("Engine not initialized. Call initialize_engine() first.")
     
@@ -124,6 +127,9 @@ def _search_internal(smiles: str, top_k: int, base_url: str = None, include_expl
     
     # FAISS-IVF search
     results = engine.search(smiles, top_k)
+    
+    if not results:
+        return []  # Empty results is valid - just no similar compounds found
     
     enriched = []
     for r in results:
@@ -195,22 +201,25 @@ def get_system_stats():
         return {
             "status": "uninitialized",
             "compounds": 0,
-            "index_type": "FAISS-IVF",
+            "index_type": "FAISS-BinaryFlat",
             "index_exists": False
         }
     
     return {
         "status": "ready",
         "compounds": len(dataset),
-        "index_type": "FAISS-IVF (Inverted File)",
-        "index_exists": engine.index_built,
+        "index_type": "FAISS-BinaryFlat (Binary Flat Index)",
+        "index_built": engine.index_built,
+        "total_indexed": engine.total_compounds,
         "fingerprint_bits": engine.bit_size,
-        "n_lists": engine.n_lists,
+        "similarity_metric": "Tanimoto (exact)",
         "generation_model": "Llama-3.1-8B-Instruct",
         "generation_enabled": True,
         "endpoints": [
             "/search/retrieval-only - Fast retrieval only",
-            "/search/full-rag - Retrieval + LLM explanation"
+            "/search/full-rag - Retrieval + LLM explanation",
+            "/stats - System statistics",
+            "/health - Health check"
         ]
     }
 

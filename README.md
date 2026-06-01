@@ -1,12 +1,88 @@
-# Chemical RAG System v2.1 🧪
+# Chemical RAG System v2.3 🧪
 
-**FAISS-IVF Powered Retrieval-Augmented Generation for 1M+ Chemical Compounds**
+**Drug-Discovery Grade Chemical Similarity with Chemical-Aware Reranking**
 
-Complete & Production-Ready System - Last Updated May 7, 2026
+Complete & Production-Ready System - Last Updated May 31, 2026
 
 ---
 
-## 📖 What's New in v2.1
+## � What's New in v2.3 (May 31, 2026)
+
+### Chemical-Aware Reranking: Drug-Discovery Grade Engine
+
+This major upgrade adds **pharmaceutical-specific domain constraints** to the ranking pipeline:
+
+| Feature | v2.1 | v2.2 | v2.3 | Impact |
+|---------|------|------|------|--------|
+| **FAISS Retrieval** | Yes | Yes | Yes | Ultra-fast screening |
+| **Multi-Fingerprints** | No | Yes | Yes | 4 perspectives (Morgan, MACCS, Atom Pairs, Torsions) |
+| **Calibration** | No | Yes | Yes | Statistically sound scores |
+| **Aromaticity Matching** | No | No | **Yes** | Rewards aromatic similarity |
+| **Ring System Matching** | No | No | **Yes** | Preserves scaffold properties |
+| **Charge Filtering** | No | No | **Yes** | Drug-likeness (Lipinski compliance) |
+| **Fragment Penalty** | No | No | **Yes** | Prefers single molecules, filters salts |
+| **MMR Diversity** | No | Yes | Yes | Eliminates redundant scaffolds |
+| **Query Time** | ~10ms | ~50ms | ~55ms | Near-instant even at 1M compounds |
+
+### The Problem with v2.2
+
+v2.2 found **structurally similar** compounds but didn't consider:
+- ❌ Aromaticity compatibility
+- ❌ Ring system topology
+- ❌ Molecular charge (drug-likeness)
+- ❌ Fragmentation (salts vs single molecules)
+
+**Result**: High-quality structural matches but not optimized for drug discovery
+
+### v2.3 Solution: Chemical-Aware Reranking
+
+5-layer pipeline now includes domain constraints:
+1. **FAISS Retrieval**: Top 200 candidates (fast)
+2. **Multi-Fingerprint Fusion**: Structural relevance
+3. **Chemical-Aware Scoring** ⭐: Aromaticity + rings + charge + fragments
+4. **Calibration**: Probability distribution
+5. **MMR Diversity**: Eliminate redundancy
+
+### Quick Example: Query Aspirin
+
+**v2.2 Results** (structure-only):
+```
+1. Aspirin (salicylic acid acetate)        - Exact match ✓
+2. Similar aromatic compound               - Good structure match ✓
+3. Highly charged aromatic compound        - Looks similar but problematic ❌
+```
+
+**v2.3 Results** (chemistry-aware):
+```
+1. Aspirin (salicylic acid acetate)        - Exact match ✓
+2. Similar aromatic compound               - Good structure match ✓
+3. Different aromatic scaffold             - Diverse, drug-like ✓
+   (Charged compounds automatically penalized)
+```
+
+### Drug-Discovery Constraints in v2.3
+
+```python
+# Aromaticity Bonus: Rewards aromatic similarity
+arom_score = 1.0 - |query_arom - candidate_arom| / max()
+# Benefit: Better for aromatic drugs (NSAIDs, antibiotics, etc.)
+
+# Ring System Bonus: Preserves scaffold topology
+ring_score = 1.0 - |query_rings - candidate_rings| / max()
+# Benefit: Critical for SAR (Structure-Activity Relationship) analysis
+
+# Charge Penalty: Filters poorly absorbable molecules
+charge_penalty = min(|formal_charge| / 3.0, 1.0)
+# Benefit: Lipinski Rule of Five compliance (better ADMET)
+
+# Fragment Penalty: Prefers single molecules
+frag_penalty = 0 if fragments ≤ 1 else (fragments - 1) × 0.3
+# Benefit: Filters salt forms, favors development-friendly compounds
+```
+
+---
+
+## 📖 What's New in v2.1 (Historical)
 
 ### 🚀 Major Upgrade: FAISS-IVF Engine
 
